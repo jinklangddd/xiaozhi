@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     WS_PING_INTERVAL: float = Field(default=20.0, description="WebSocket ping interval in seconds")
     WS_PING_TIMEOUT: float = Field(default=20.0, description="WebSocket ping timeout in seconds")
     WS_CLOSE_TIMEOUT: float = Field(default=10.0, description="WebSocket close timeout in seconds")
+    WS_RECEIVE_TIMEOUT: float = Field(default=30.0, description="WebSocket receive timeout in seconds")
+
+
+    SERVICE_TIMEOUT: float = Field(default=30.0, description="service timeout in seconds")
 
     # 请示超时
     REQUEST_TIMEOUT: float = Field(default=30.0, description="llm http request timeout in seconds")
