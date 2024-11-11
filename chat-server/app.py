@@ -5,8 +5,6 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Tuple, AsyncGenerator
 import asyncio
-import aiohttp
-import requests
 from starlette import status
 from websockets.client import connect as ws_connect, WebSocketClientProtocol
 from websockets.exceptions import WebSocketException
@@ -17,6 +15,7 @@ from starlette.websockets import WebSocketDisconnect
 from dotenv import load_dotenv
 
 from settings import Settings
+from services.llm_service import LLMService
 
 load_dotenv()
 
@@ -221,83 +220,7 @@ class SessionManager:
                 logging.error(f"Error cleaning up session {client_id}: {e}")
 
 
-class LLMService:
-    @staticmethod
-    def _prepare_request(query: str, conversation_id: str, user: str, response_mode: str = "blocking") -> Tuple[str, dict, dict]:
-        """准备 LLM 请求的通用参数"""
-        url = settings.LLM_API_URL
-        headers = {
-            'Authorization': f'Bearer {LLM_API_KEY}',
-            'Content-Type': 'application/json',
-        }
-        data = {
-            "inputs": {},
-            "query": query,
-            "response_mode": response_mode,
-            "conversation_id": conversation_id,
-            "user": user
-        }
-        return url, headers, data
-
-    @staticmethod
-    def get_response_blocking(query: str, conversation_id: str, user: str) -> str:
-        """获取 LLM 的阻塞式响应"""
-        url, headers, data = LLMService._prepare_request(query, conversation_id, user)
-        
-        try:
-            response = requests.post(url, headers=headers, json=data)
-            if response.status_code != 200:
-                logging.error(f"LLM API error: {response.status_code}, {response.text}")
-                raise ConnectionError(f"LLM service error: {response.status_code}")
-            
-            response_text = response.text.encode('utf-8').decode('unicode_escape').strip()
-            logging.info(f"LLM response received for conversation {conversation_id}")
-            return response_text
-        except requests.RequestException as e:
-            logging.error(f"LLM API request failed: {e}")
-            raise ConnectionError(f"LLM service connection failed: {e}")
-        except Exception as e:
-            logging.error(f"Unexpected error in LLM service: {e}")
-            raise
-
-    @staticmethod
-    async def get_response(query: str, conversation_id: str, user: str) -> AsyncGenerator[str, None]:
-        """获取 LLM 的流式响应"""
-        url, headers, data = LLMService._prepare_request(query, conversation_id, user, "streaming")
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(url, headers=headers, json=data) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logging.error(f"LLM API error: {response.status}, {error_text}")
-                        raise ConnectionError(f"LLM service error: {response.status}")
-
-                    async for line in response.content:
-                        if line:
-                            try:
-                                line_text = line.decode('unicode_escape').strip()
-                                if line_text:
-                                    json_data = json.loads(line_text)
-                                    if 'answer' in json_data:
-                                        yield json_data['answer']
-                            except json.JSONDecodeError as e:
-                                logging.error(f"JSON decode error: {e}")
-                                continue
-                            except Exception as e:
-                                logging.error(f"Error processing response line: {e}")
-                                continue
-
-            except aiohttp.ClientError as e:
-                logging.error(f"LLM API request failed: {e}")
-                raise ConnectionError(f"LLM service connection failed: {e}")
-            except Exception as e:
-                logging.error(f"Unexpected error in LLM service: {e}")
-                raise
-
-
 session_manager = SessionManager()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -382,7 +305,10 @@ async def websocket_endpoint(websocket:WebSocket):
         logging.info(f"New connection request - Device ID: {device_id}, Protocol Version: {protocol_version}")
 
         chat_session = await session_manager.create_session(websocket)
-        llm_service = LLMService()
+        llm_service = LLMService(
+            api_key=LLM_API_KEY,
+            api_url=settings.LLM_API_URL
+        )
 
         while True:
             # 更新活动时间
@@ -409,7 +335,7 @@ async def websocket_endpoint(websocket:WebSocket):
                 logging.info(f"Speech to text: {text}")
 
                 # 2. 获取LLM响应（改用阻塞式调用）
-                response_text = LLMService.get_response_blocking(text, "conversation_id", "user")
+                response_text = llm_service.get_response_blocking(text, "conversation_id", "user")
                 logging.info(f"LLM response: {response_text}")
                 
                 # 3. 将响应转换为语音

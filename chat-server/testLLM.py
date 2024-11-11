@@ -1,14 +1,30 @@
 # 使用绝对导    
-from app import LLMService
+import os
+from dotenv import load_dotenv
 
-llm_service = LLMService()
+from settings import Settings
+from services.llm_service import LLMService
+
+load_dotenv()
+
+
+# 常量定义
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+# 初始化配置
+settings = Settings()
+
+
+llm_service = LLMService(
+            api_key=LLM_API_KEY,
+            api_url=settings.LLM_API_URL
+        )
 
 async def test():
     async for response_chunk in llm_service.get_response("你好", "", "justin"):
         print(response_chunk)
 
 def test_blocking():
-    response = llm_service.get_response_blocking("你知道我叫什么名字吗", "71e8acdf-360f-4a57-bc05-49d5f77b11fd", "justin")
+    response = llm_service.get_response_blocking("你知道我叫什么名字吗", "", "justin")
     print(response)
 
 if __name__ == "__main__":
