@@ -2,6 +2,7 @@
 import json
 import os
 from dotenv import load_dotenv
+import time  # 添加在文件顶部
 
 from settings import Settings
 from services.llm_service import LLMService
@@ -32,11 +33,13 @@ def test_blocking():
         if user_input.lower() == 'q':
             break
             
+        start_time = time.time()
         response = llm_service.get_response_blocking({"assistant_name": "小明"}, user_input, conversation_id, "justin")
         response = json.loads(response)
-        conversation_id = response['conversation_id']
+        end_time = time.time()
         
         print("AI回答:", response['answer'])
+        print(f"执行时间: {end_time - start_time:.2f} 秒")
 
 if __name__ == "__main__":
     import asyncio
