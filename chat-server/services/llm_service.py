@@ -10,14 +10,14 @@ class LLMService:
         self.api_key = api_key
         self.api_url = api_url
 
-    def _prepare_request(self, query: str, conversation_id: str, user: str, response_mode: str = "blocking") -> Tuple[str, dict, dict]:
+    def _prepare_request(self, inputs: dict, query: str, conversation_id: str, user: str, response_mode: str = "blocking") -> Tuple[str, dict, dict]:
         """准备 LLM 请求的通用参数"""
         headers = {
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json',
         }
         data = {
-            "inputs": {},
+            "inputs": inputs,
             "query": query,
             "response_mode": response_mode,
             "conversation_id": conversation_id,
@@ -25,9 +25,9 @@ class LLMService:
         }
         return self.api_url, headers, data
 
-    def get_response_blocking(self, query: str, conversation_id: str, user: str) -> str:
+    def get_response_blocking(self, inputs: dict, query: str, conversation_id: str, user: str) -> str:
         """获取 LLM 的阻塞式响应"""
-        url, headers, data = self._prepare_request(query, conversation_id, user)
+        url, headers, data = self._prepare_request(inputs, query, conversation_id, user)
         
         try:
             response = requests.post(url, headers=headers, json=data)
@@ -35,7 +35,7 @@ class LLMService:
                 logging.error(f"LLM API error: {response.status_code}, {response.text}")
                 raise ConnectionError(f"LLM service error: {response.status_code}")
             
-            response_text = response.text.encode('utf-8').decode('unicode_escape').strip()
+            response_text = response.text
             logging.info(f"LLM response received for conversation {conversation_id}")
             return response_text
             
@@ -47,9 +47,9 @@ class LLMService:
             raise 
 
 
-    async def get_response(self, query: str, conversation_id: str, user: str) -> AsyncGenerator[str, None]:
+    async def get_response(self, inputs: dict, query: str, conversation_id: str, user: str) -> AsyncGenerator[str, None]:
         """获取 LLM 的流式响应"""
-        url, headers, data = self._prepare_request(query, conversation_id, user, "streaming")
+        url, headers, data = self._prepare_request(inputs, query, conversation_id, user, "streaming")
         
         async with aiohttp.ClientSession() as session:
             try:

@@ -1,4 +1,5 @@
 # 使用绝对导    
+import json
 import os
 from dotenv import load_dotenv
 
@@ -20,12 +21,14 @@ llm_service = LLMService(
         )
 
 async def test():
-    async for response_chunk in llm_service.get_response("你好", "", "justin"):
+    async for response_chunk in llm_service.get_response({"assistant_name": "小明"}, "你好", "", "justin"):
         print(response_chunk)
 
 def test_blocking():
-    response = llm_service.get_response_blocking("你知道我叫什么名字吗", "", "justin")
-    print(response)
+    response = llm_service.get_response_blocking({"assistant_name": "小明"}, "你知道我叫什么名字吗", "", "justin")
+    
+    response = json.loads(response)
+    print(response['answer'])
 
 if __name__ == "__main__":
     import asyncio
