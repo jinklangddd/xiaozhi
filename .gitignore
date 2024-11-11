@@ -4,3 +4,4 @@ package-lock.json
 TODO.md
 *.pyc
 .idea
+.env
