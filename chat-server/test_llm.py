@@ -25,10 +25,18 @@ async def test():
         print(response_chunk)
 
 def test_blocking():
-    response = llm_service.get_response_blocking({"assistant_name": "小明"}, "你知道我叫什么名字吗", "", "justin")
-    
-    response = json.loads(response)
-    print(response['answer'])
+
+    conversation_id = ""
+    while True:
+        user_input = input("请输入问题 (输入 'q' 退出): ")
+        if user_input.lower() == 'q':
+            break
+            
+        response = llm_service.get_response_blocking({"assistant_name": "小明"}, user_input, conversation_id, "justin")
+        response = json.loads(response)
+        conversation_id = response['conversation_id']
+        
+        print("AI回答:", response['answer'])
 
 if __name__ == "__main__":
     import asyncio
