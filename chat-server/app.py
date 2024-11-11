@@ -408,17 +408,17 @@ async def websocket_endpoint(websocket:WebSocket):
                 text = await chat_session.service_session.speech_to_text(audio_data)
                 logging.info(f"Speech to text: {text}")
 
-                # 2. 获取LLM响应并逐个处理
-                async for response_chunk in llm_service.get_response(text):
-                    logging.info(f"LLM response chunk: {response_chunk}")
-                    
-                    # 3. 将每个响应片段转换为语音
-                    audio_response = await chat_session.service_session.text_to_speech(response_chunk)
-                    logging.debug("Audio response generated")
+                # 2. 获取LLM响应（改用阻塞式调用）
+                response_text = LLMService.get_response_blocking(text, "conversation_id", "user")
+                logging.info(f"LLM response: {response_text}")
+                
+                # 3. 将响应转换为语音
+                audio_response = await chat_session.service_session.text_to_speech(response_text)
+                logging.debug("Audio response generated")
 
-                    # 4. 发送响应给客户端
-                    await websocket.send_bytes(audio_response)
-                    logging.debug("Response chunk sent to client")
+                # 4. 发送响应给客户端
+                await websocket.send_bytes(audio_response)
+                logging.debug("Response sent to client")
 
             except ConnectionError as e:
                 logging.error(f"Service connection error: {e}")
