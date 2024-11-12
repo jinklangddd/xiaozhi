@@ -62,8 +62,11 @@ class LLMService:
                     async for line in response.content:
                         if line:
                             try:
-                                line_text = line.decode('unicode_escape').strip()
-                                yield line_text;
+                                 # 如果是字节串，先解码
+                                if isinstance(line, bytes):
+                                    line = line.decode('utf-8')
+
+                                yield line;
                             except Exception as e:
                                 logging.error(f"Error processing response line: {e}")
                                 continue

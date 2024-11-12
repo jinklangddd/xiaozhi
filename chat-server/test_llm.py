@@ -1,6 +1,7 @@
 # 使用绝对导    
 import json
 import os
+import string
 from dotenv import load_dotenv
 import time  # 添加在文件顶部
 
@@ -29,19 +30,30 @@ async def test():
         if user_input.lower() == 'q':
             break
 
+        start_time = time.time()
+        answer = ""
         async for response_chunk in llm_service.get_response({"assistant_name": "小明"}, user_input, conversation_id, "justin"):
-            if response_chunk == "":
+            if not response_chunk or response_chunk.strip() == "":
                 continue
-            # print(response_chunk)
+            # print("response_chunk: "+response_chunk)
             response_chunk = response_chunk.replace("data: ", "")
-            print(response_chunk)
+            # print(response_chunk)
             response = json.loads(response_chunk)
 
             event = response['event']
             conversation_id = response['conversation_id']
             
             if event == "message":
-                print(response['answer'])
+                answer += response['answer']
+
+                if not response['answer'].strip(string.punctuation + '，。！？'):
+                    end_time = time.time()
+        
+                    print("AI回答:", answer)
+                    print(f"执行时间: {end_time - start_time:.2f} 秒")
+
+                    answer = ""
+                    start_time = time.time()
             
             if event == "message_end":
                 print("message_end")
