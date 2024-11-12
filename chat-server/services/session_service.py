@@ -3,12 +3,9 @@ import logging
 from typing import Dict, Optional
 import uuid
 import time
-import json
-import struct
-
+from services.message_handler import MessageHandler
 from fastapi import WebSocket, WebSocketException
 from websockets import WebSocketClientProtocol, connect as ws_connect
-from services.llm_service import LLMService
 
 class ServiceSession:
     def __init__(self, settings):
