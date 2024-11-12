@@ -46,7 +46,7 @@ async def test():
             if event == "message":
                 answer += response['answer']
 
-                if not response['answer'].strip(string.punctuation + '，。！？'):
+                if not response['answer'].strip(' ,?.!,。！？'):
                     end_time = time.time()
         
                     print("AI回答:", answer)
@@ -78,6 +78,6 @@ def test_blocking():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(test())
-    # test_blocking()
+    # asyncio.run(test())
+    test_blocking()
 
