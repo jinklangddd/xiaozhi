@@ -1,10 +1,14 @@
 import asyncio
 import logging
 from typing import Dict, Optional
+import uuid
+import time
+import json
+import struct
 
 from fastapi import WebSocket, WebSocketException
 from websockets import WebSocketClientProtocol, connect as ws_connect
-
+from services.llm_service import LLMService
 
 class ServiceSession:
     def __init__(self, settings):
@@ -102,13 +106,150 @@ class ServiceSession:
 class ChatSession:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
-        self.service_session = ServiceSession()
-        self.client_id = id(websocket)
-        self.last_active_time = asyncio.get_event_loop().time()  # 添加最后活动时间
+        self.client_id = str(uuid.uuid4())
+        self.last_activity = time.time()
+        self.service_session = None
+        
+        # 状态管理
+        self.state = 'idle'
+        self.response_mode = 'auto'
+        self.audio_params = {
+            "format": "opus",
+            "sample_rate": 16000,
+            "channels": 1
+        }
+        
+
+    async def handle_hello(self, message: dict):
+        """处理 hello 消息"""
+        self.response_mode = message.get('response_mode', 'auto')
+        self.audio_params.update(message.get('audio_params', {}))
+        logging.info(f"Session {self.client_id} initialized with response_mode: {self.response_mode}, audio_params: {self.audio_params}")
+
+    async def handle_state(self, message: dict):
+        """处理 state 消息"""
+        new_state = message.get('state')
+        logging.info(f"Received state message: {new_state}")
+        
+        if new_state == 'idle':
+            await self.set_state('idle')
+         
+                
+        elif new_state == 'wake_word_detected':
+            await self.set_state('wake_word_detected')
+           
+            
+        elif new_state == 'listening':
+            await self.set_state('listening')
+          
+            
+        elif new_state == 'speaking':
+            await self.set_state('speaking')
+        
+
+    async def handle_abort(self):
+        """处理 abort 消息"""
+        if self.vad_task:
+            self.vad_task.cancel()
+        self.pending_audio.clear()
+        await self.set_state('idle')
+        await self.websocket.send_json({
+            "type": "tts",
+            "state": "stop"
+        })
+
+    async def handle_binary_message(self, audio_data: bytes, llm_service: LLMService):
+        """处理二进制消息"""
+        if len(audio_data) < 4:
+            logging.error("Invalid protocol data: too short")
+            return
+        
+        # 解析协议头部
+        header = audio_data[:4]
+        msg_type, reserved, payload_size = struct.unpack('>BBH', header)
+
+        # 验证数据完整性
+        if len(audio_data) != payload_size + 4:
+            logging.error(f"Invalid data length. Expected {payload_size + 4}, got {len(audio_data)}")
+            return
+
+        payload = audio_data[4:]
+
+        if msg_type == 0:  # 音频流数据
+            await self._handle_audio_data(payload, llm_service)
+        elif msg_type == 1:  # JSON数据
+            await self._handle_json_payload(payload)
+        else:
+            logging.error(f"Unknown message type: {msg_type}")
+
+    async def _handle_audio_data(self, payload: bytes, llm_service: LLMService):
+        """处理音频数据"""
+        if len(payload) == 0:  # 句子边界标记
+            return
+            
+        # 处理音频数据
+        text = await self.service_session.speech_to_text(payload)
+        
+        # 发送 STT 结果
+        await self.websocket.send_json({
+            "type": "stt",
+            "text": text
+        })
+        
+        # 获取 LLM 响应
+        response_text = llm_service.get_response_blocking(text, "conversation_id", "user")
+        logging.info(f"LLM response: {response_text}")
+        
+        await self._send_tts_response(response_text)
+
+    async def _handle_json_payload(self, payload: bytes):
+        """处理 JSON 负载"""
+        try:
+            json_data = json.loads(payload)
+            logging.info(f"Received JSON payload: {json_data}")
+        except json.JSONDecodeError:
+            logging.error("Invalid JSON payload")
+
+    async def _send_tts_response(self, text: str):
+        """发送 TTS 响应"""
+        # 发送 TTS 开始消息
+        await self.websocket.send_json({
+            "type": "tts",
+            "state": "start",
+            "sample_rate": self.audio_params["sample_rate"]
+        })
+        
+        # 发送句子开始消息
+        await self.websocket.send_json({
+            "type": "tts",
+            "state": "sentence_start",
+            "text": text
+        })
+        
+        # 转换为语音并发送
+        audio_response = await self.service_session.text_to_speech(text)
+        await self.websocket.send_bytes(audio_response)
+        
+        # 发送句子结束和 TTS 结束消息
+        await self.websocket.send_json({
+            "type": "tts",
+            "state": "sentence_end"
+        })
+        await self.websocket.send_json({
+            "type": "tts",
+            "state": "stop"
+        })
+
+    async def set_state(self, new_state: str):
+        """设置会话状态"""
+        self.state = new_state
+        self.last_activity = time.time()
+        logging.info(f"Session {self.client_id} state changed to: {new_state}")
+
 
     async def update_activity(self):
         """更新最后活动时间"""
-        self.last_active_time = asyncio.get_event_loop().time()
+        self.last_activity = time.time()
 
     async def close(self):
         """关闭会话相关的连接"""
