@@ -133,26 +133,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     timeout=settings.WS_RECEIVE_TIMEOUT
                 )
                 
-                # 处理文本消息
-                if isinstance(message, str):
-                    message_json = json.loads(message)
-                    if message_json['type'] == 'hello':
-                        # 处理 hello
-                        logging.info(f"Received hello message: {message_json}")
-                        await chat_session.handle_hello(message_json)
-                       
-                    elif message_json['type'] == 'state':
-                        # 处理 state
-                        await chat_session.handle_state(message_json)
-                        
-                    elif message_json['type'] == 'abort':
-                        # 处理 abort
-                        logging.info(f"Received abort message: {message_json}")
-                        await chat_session.handle_abort()
-                        
-                # 处理二进制消息
-                elif isinstance(message, bytes):
-                    await chat_session.handle_binary_message(message, llm_service)
+                # 使用消息处理器处理消息
+                await chat_session.message_handler.handle_message(message, llm_service)
 
             except asyncio.TimeoutError:
                 logging.warning("Timeout waiting for data")
