@@ -41,14 +41,3 @@ class Settings(BaseSettings):
 
     # 日志配置
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = 'utf-8'
-        case_sensitive = True
-
-        # 添加配置说明
-        @staticmethod
-        def schema_extra(schema: Dict[str, Any]) -> None:
-            for prop in schema.get("properties", {}).values():
-                prop.pop("title", None)
