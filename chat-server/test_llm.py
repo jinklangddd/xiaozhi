@@ -32,7 +32,7 @@ async def test():
 
         start_time = time.time()
         answer = ""
-        async for response_chunk in llm_service.get_response({"assistant_name": "小明"}, user_input, conversation_id, "justin"):
+        async for response_chunk in llm_service.get_response_streaming({"assistant_name": "小明"}, user_input, conversation_id, "justin"):
             if not response_chunk or response_chunk.strip() == "":
                 continue
             # print("response_chunk: "+response_chunk)

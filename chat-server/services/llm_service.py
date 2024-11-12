@@ -47,7 +47,7 @@ class LLMService:
             raise 
 
 
-    async def get_response(self, inputs: dict, query: str, conversation_id: str, user: str) -> AsyncGenerator[str, None]:
+    async def get_response_streaming(self, inputs: dict, query: str, conversation_id: str, user: str) -> AsyncGenerator[str, None]:
         """获取 LLM 的流式响应"""
         url, headers, data = self._prepare_request(inputs, query, conversation_id, user, "streaming")
         
