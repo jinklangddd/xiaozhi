@@ -22,8 +22,31 @@ llm_service = LLMService(
         )
 
 async def test():
-    async for response_chunk in llm_service.get_response({"assistant_name": "小明"}, "你好", "", "justin"):
-        print(response_chunk)
+
+    conversation_id = ""
+    while True:
+        user_input = input("请输入问题 (输入 'q' 退出): ")
+        if user_input.lower() == 'q':
+            break
+
+        async for response_chunk in llm_service.get_response({"assistant_name": "小明"}, user_input, conversation_id, "justin"):
+            if response_chunk == "":
+                continue
+            # print(response_chunk)
+            response_chunk = response_chunk.replace("data: ", "")
+            print(response_chunk)
+            response = json.loads(response_chunk)
+
+            event = response['event']
+            conversation_id = response['conversation_id']
+            
+            if event == "message":
+                print(response['answer'])
+            
+            if event == "message_end":
+                print("message_end")
+                break
+                
 
 def test_blocking():
 
@@ -43,6 +66,6 @@ def test_blocking():
 
 if __name__ == "__main__":
     import asyncio
-    #asyncio.run(test())
-    test_blocking()
+    asyncio.run(test())
+    # test_blocking()
 

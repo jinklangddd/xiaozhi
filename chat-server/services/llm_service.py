@@ -63,13 +63,7 @@ class LLMService:
                         if line:
                             try:
                                 line_text = line.decode('unicode_escape').strip()
-                                if line_text:
-                                    json_data = json.loads(line_text)
-                                    if 'answer' in json_data:
-                                        yield json_data['answer']
-                            except json.JSONDecodeError as e:
-                                logging.error(f"JSON decode error: {e}")
-                                continue
+                                yield line_text;
                             except Exception as e:
                                 logging.error(f"Error processing response line: {e}")
                                 continue
