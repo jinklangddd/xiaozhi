@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+import struct
 import sys
 from contextlib import asynccontextmanager
 from typing import Tuple
@@ -108,10 +110,18 @@ async def get_token(websocket: WebSocket) -> Tuple[str, str, str]:
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket:WebSocket):
     chat_session = None
+    current_state = "idle"
+    response_mode = "auto"
+    audio_params = {
+        "format": "opus",
+        "sample_rate": 16000,
+        "channels": 1
+    }
+
     try:
         # 获取并验证 headers
         authorization, device_id, protocol_version = await get_token(websocket)
-        logging.info(f"New connection request - Device ID: {device_id}, Protocol Version: {protocol_version}")
+        logging.info(f"New connection request - Authorization: {authorization}, Device ID: {device_id}, Protocol Version: {protocol_version}")
 
         chat_session = await session_manager.create_session(websocket)
         llm_service = LLMService(
@@ -123,44 +133,107 @@ async def websocket_endpoint(websocket:WebSocket):
             # 更新活动时间
             await chat_session.update_activity()
 
-            # 接收音频数据
             try:
-                audio_data = await asyncio.wait_for(
-                    websocket.receive_bytes(),
+                # 统一接收消息
+                message = await asyncio.wait_for(
+                    websocket.receive(),
                     timeout=settings.WS_RECEIVE_TIMEOUT
                 )
-            except asyncio.TimeoutError:
-                logging.warning("Timeout waiting for audio data")
-                continue
-            except WebSocketDisconnect:
-                raise
-            except Exception as e:
-                logging.error(f"Error receiving audio data: {e}")
-                raise
-
-            try:
-                # 1. 语音转文本
-                text = await chat_session.service_session.speech_to_text(audio_data)
-                logging.info(f"Speech to text: {text}")
-
-                # 2. 获取LLM响应（改用阻塞式调用）
-                response_text = llm_service.get_response_blocking(text, "conversation_id", "user")
-                logging.info(f"LLM response: {response_text}")
                 
-                # 3. 将响应转换为语音
-                audio_response = await chat_session.service_session.text_to_speech(response_text)
-                logging.debug("Audio response generated")
+                # 处理文本消息
+                if isinstance(message, str):
+                    message_json = json.loads(message)
+                    if message_json['type'] == 'hello':
+                        # 处理 hello
+                        logging.info(f"Received hello message: {message_json}")
+                        response_mode = message_json.get('response_mode')
+                        audio_params = message_json.get('audio_params')
+                       
+                    elif message_json['type'] == 'state':
+                        # 处理 state  unknown,idle,connecting, listening, speaking, wake_word_detected, testing, upgrading, invalid_state
+                        state = message_json.get('state')
+                        logging.info(f"Received state message: {state}")
 
-                # 4. 发送响应给客户端
-                await websocket.send_bytes(audio_response)
-                logging.debug("Response sent to client")
+                        if state == 'idle':
+                            pass
 
-            except ConnectionError as e:
-                logging.error(f"Service connection error: {e}")
-                raise
-            except Exception as e:
-                logging.error(f"Error processing message: {e}")
-                raise
+                        elif state == 'listening':
+                            # 正在监听用户输入
+                            pass
+                        elif state == 'speaking':
+                            # 正在播放语音
+                            pass
+                        elif state == 'wake_word_detected':
+                            # 检测到唤醒词,开始应答
+                            pass
+                        elif state == 'testing':
+                            # 测试状态
+                            pass
+                        elif state == 'upgrading':
+                            # 升级状态
+                            pass
+                        else:
+                            logging.error(f"未知的状态: {state}")
+
+                        # 更新当前状态
+                        current_state = state
+
+                    elif message_json['type'] == 'abort':
+                         # 处理 abort
+                        logging.info(f"Received abort message: {message_json}")
+                        await chat_session.close()
+                       
+                        
+                # 处理二进制消息
+                elif isinstance(message, bytes):
+                    audio_data = message
+                    if len(audio_data) < 4:
+                        logging.error("Invalid protocol data: too short")
+                        continue
+                    
+                    # 解析协议头部
+                    header = audio_data[:4]
+                    msg_type, reserved, payload_size = struct.unpack('>BBH', header)
+
+                    # 验证数据完整性
+                    if len(audio_data) != payload_size + 4:
+                        logging.error(f"Invalid data length. Expected {payload_size + 4}, got {len(audio_data)}")
+                        continue
+
+                    # 获取负载数据
+                    payload = audio_data[4:]
+
+                    # 根据消息类型处理数据
+                    if msg_type == 0:  # 音频流数据
+                        # 1. 语音转文本
+                        text = await chat_session.service_session.speech_to_text(payload)
+                        
+                        # 2. 获取LLM响应
+                        response_text = llm_service.get_response_blocking(text, "conversation_id", "user")
+                        logging.info(f"LLM response: {response_text}")
+                        
+                        # 3. 将响应转换为语音
+                        audio_response = await chat_session.service_session.text_to_speech(response_text)
+                        logging.debug("Audio response generated")
+
+                        # 4. 发送响应给客户端
+                        await websocket.send_bytes(audio_response)
+                        logging.debug("Response sent to client")
+                        
+                    elif msg_type == 1:  # JSON数据
+                        try:
+                            json_payload = json.loads(payload)
+                            logging.info(f"Received JSON payload: {json_payload}")
+                        except json.JSONDecodeError:
+                            logging.error("Invalid JSON payload")
+                            continue
+                    else:
+                        logging.error(f"Unknown message type: {msg_type}")
+                        continue
+
+            except asyncio.TimeoutError:
+                logging.warning("Timeout waiting for data")
+                continue
 
     except WebSocketDisconnect:
         logging.info(f"Client disconnected{' - ID: ' + str(chat_session.client_id) if chat_session else ''}")
