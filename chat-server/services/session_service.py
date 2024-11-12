@@ -7,12 +7,13 @@ from services.message_handler import MessageHandler
 from fastapi import WebSocket, WebSocketException
 from websockets import WebSocketClientProtocol, connect as ws_connect
 
-class ServiceSession:
+class SessionService:
     def __init__(self, settings):
         self.asr_ws: Optional[WebSocketClientProtocol] = None
         self.tts_ws: Optional[WebSocketClientProtocol] = None
         self.reconnect_attempts = settings.RECONNECT_ATTEMPTS
         self.reconnect_delay = settings.RECONNECT_DELAY
+        self.settings = settings
 
     async def _connect_service(self, service_type: str, uri: str) -> WebSocketClientProtocol:
         """通用的服务连接方法"""
@@ -101,11 +102,11 @@ class ServiceSession:
 
 
 class ChatSession:
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, settings):
         self.websocket = websocket
         self.client_id = str(uuid.uuid4())
         self.last_activity = time.time()
-        self.service_session = None
+        self.session_service = SessionService(settings)
         
         # 状态管理
         self.state = 'idle'
@@ -172,7 +173,8 @@ class SessionManager:
 
         # 创建会话
         session = ChatSession(
-            websocket=websocket
+            websocket=websocket,
+            settings=self.settings  # 传入 settings
         )
 
         # 存储会话

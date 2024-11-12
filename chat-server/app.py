@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import struct
 import sys
 from contextlib import asynccontextmanager
 from typing import Tuple
