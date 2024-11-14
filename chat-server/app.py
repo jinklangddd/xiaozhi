@@ -112,7 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # 获取并验证 headers
         authorization, device_id, protocol_version = await get_token(websocket)
-        logging.info(f"New connection request - Device ID: {device_id}, Protocol Version: {protocol_version}")
+        logging.info(f"New connection request - authorization:{authorization}, Device ID: {device_id}, Protocol Version: {protocol_version}")
 
         chat_session = await session_manager.create_session(websocket)
         llm_service = LLMService(
